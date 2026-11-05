@@ -7,7 +7,7 @@
     @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
   </style>
   <defs>
-    <filter id="neon" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.5" result="b0"/><feGaussianBlur in="SourceAlpha" stdDeviation="4" result="b1"/><feGaussianBlur in="SourceAlpha" stdDeviation="8" result="b2"/><feMerge result="bm"><feMergeNode in="b2"/><feMergeNode in="b1"/><feMergeNode in="b0"/></feMerge><feFlood flood-color="#ff3ea5"/><feComposite in2="bm" operator="in" result="glow"/><feMerge><feMergeNode in="glow"/><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="neon" x="-50%" y="-150%" width="200%" height="400%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.5" result="b0"/><feGaussianBlur in="SourceAlpha" stdDeviation="4" result="b1"/><feGaussianBlur in="SourceAlpha" stdDeviation="8" result="b2"/><feMerge result="bm"><feMergeNode in="b2"/><feMergeNode in="b1"/><feMergeNode in="b0"/></feMerge><feFlood flood-color="#ff3ea5"/><feComposite in2="bm" operator="in" result="glow"/><feMerge><feMergeNode in="glow"/><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <filter id="soft" x="-5%" y="-400%" width="110%" height="900%"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <linearGradient id="rule" x1="161.2" y1="0" x2="840" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#ff3ea5"/><stop offset=".6" stop-color="#2de2e6" stop-opacity=".6"/><stop offset="1" stop-color="#2de2e6" stop-opacity="0"/>

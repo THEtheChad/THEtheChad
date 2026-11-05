@@ -14,6 +14,7 @@ Every SVG is fully visible with animation off (static renderers, reduced motion)
 animations only dip opacity briefly (a neon sputter), never hide things at rest.
 """
 
+import math
 import random
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -29,24 +30,25 @@ ASSETS = ROOT / "assets"
 # ---- CONFIG (edit me) -------------------------------------------------------
 HANDLE = "THEtheChad"
 PLACE = "KANSAS CITY, MO"
-TAGLINE = "CODE / HARDWARE / TINKERING"
+TAGLINE = "AGENTIC SDLC / AI / HARDWARE"
 HEADERS = (  # (file stem, index, script word, alt text)
     ("h-about", "01", "about", "About"),
     ("h-stack", "02", "the stack", "The stack"),
     ("h-lately", "03", "lately", "Lately"),
 )
-SIDE_A = ("TypeScript · JavaScript", "React · Next.js", "Node.js · Tailwind CSS", "Python · Bash", "Git")
-SIDE_B = ("Arduino", "ESP · STM32", "Anything with a serial port")
+SIDE_A = ("Claude Code · Codex", "Multi-agent orchestration", "Plan → build → review loops", "MCP servers · hooks", "Worktrees & guardrails")
+SIDE_B = ("TypeScript · React · Next.js", "Node.js · Python · Bash", "Arduino · ESP · STM32", "Anything with a serial port")
 LINER_CAPTION = "recorded in Kansas City"
 # -----------------------------------------------------------------------------
 
-# Palette: The Midnight's dusk sky + React Miami's neon pink, cyan for the name.
+# Palette: The Midnight's dusk sky + React Miami's neon pink; cyan drone lights.
 NIGHT, INK = "#0d0b14", "#07060d"
 SKY = ("#0b0620", "#1b1240", "#4b1d6b", "#b0306a", "#ff8a6b")
 VIOLET, RIM = "#2a1450", "#3a1f5c"
 PINK, PINK_SOFT, MAGENTA = "#ff3ea5", "#ff65b8", "#ff10f0"
 CYAN, CYAN_DEEP, CORE = "#2de2e6", "#1b6fd6", "#e6fdff"
 WARM, TEXT, MUTED = "#ffcf7a", "#f3e9ff", "#b8a6d9"
+RED, RED_GLOW, DRONE = "#ff4433", "#ff2a1f", "#7f89bf"  # Western Auto neon; drone frames
 PINK_ON_WHITE, CYAN_ON_WHITE = "#c2186b", "#0e7490"
 
 MONO = (
@@ -106,14 +108,14 @@ def neon_filter(fid: str, color: str, blurs: tuple[float, ...], strength: int = 
     merged = "".join(f'<feMergeNode in="b{i}"/>' for i in reversed(range(len(blurs))))
     halos = '<feMergeNode in="glow"/>' * strength
     return (
-        f'<filter id="{fid}" x="-30%" y="-80%" width="160%" height="260%">{layers}'
+        f'<filter id="{fid}" x="-50%" y="-150%" width="200%" height="400%">{layers}'
         f'<feMerge result="bm">{merged}</feMerge>'
         f'<feFlood flood-color="{color}"/><feComposite in2="bm" operator="in" result="glow"/>'
         f'<feMerge>{halos}<feMergeNode in="SourceGraphic"/></feMerge></filter>'
     )
 
 
-# ---- 5x7 LED matrix, like a MAX7219 module --------------------------------
+# ---- Drone light show: each lit cell of a 5x7 matrix is one quadcopter ----
 MATRIX = {
     "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
     "H": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
@@ -124,89 +126,150 @@ MATRIX = {
 }
 
 
-def matrix(word: str, x0: float, y0: float, pitch: float) -> tuple[list[str], list[str]]:
-    """Return (lit, unlit) <use> dots for a word; each letter is a 5x7 module."""
-    lit, unlit = [], []
+def drones(word: str, x0: float, y0: float, pitch: float, rnd: random.Random) -> list[str]:
+    """One <use> per drone. Each flies up from the ground into formation once;
+    with animation off it simply sits in formation."""
+    out = []
     for i, ch in enumerate(word):
         for row, bits in enumerate(MATRIX[ch]):
             for col, bit in enumerate(bits):
-                cx, cy = x0 + (i * 6 + col) * pitch, y0 + row * pitch
-                (lit if bit == "1" else unlit).append(f'<use href="#dot" x="{n(cx)}" y="{n(cy)}"/>')
-    return lit, unlit
+                if bit != "1":
+                    continue
+                x, y = x0 + (i * 6 + col) * pitch, y0 + row * pitch
+                dx, dy = rnd.uniform(-70, 70), GROUND - 4 - y  # lift off from the horizon
+                out.append(
+                    f'<use href="#drone" x="{n(x)}" y="{n(y)}" class="fly" '
+                    f'style="--dx:{dx:.0f}px;--dy:{dy:.0f}px;animation-delay:{rnd.uniform(0, 1.4):.2f}s"/>'
+                )
+    return out
 
 
 # ---- Kansas City skyline -------------------------------------------------
 GROUND = 318
+SIGN_X, SIGN_Y, SIGN_R = 381, 116, 56  # Western Auto sign: centre and ring radius
+WA_X, WA_W, WA_TOP = 335, 92, 200  # Western Auto building under it
 
 
 def skyline() -> tuple[str, str, str]:
     """(back layer, front silhouette, lit windows). Stylised, west to east:
-    Liberty Memorial on its hill, City Hall, Power & Light (glowing lantern),
-    One Kansas City Place, Town Pavilion, then the Bartle Hall pylons."""
+    Liberty Memorial on its hill, the Western Auto building (its sign is drawn
+    separately), City Hall, Power & Light (glowing lantern), One Kansas City
+    Place, Town Pavilion, then the Bartle Hall pylons."""
     rnd = random.Random(1986)
 
     back = "".join(
         f'<rect x="{x}" y="{GROUND - h}" width="{w}" height="{h}"/>'
         for x, w, h in (
-            (0, 40, 34), (190, 34, 52), (226, 28, 70), (262, 40, 46), (318, 26, 88), (568, 36, 74),
-            (606, 30, 56), (790, 50, 40), (250, 22, 96), (540, 24, 102), (436, 30, 60),
+            (0, 40, 34), (196, 30, 52), (230, 28, 76), (296, 34, 96), (430, 30, 92), (590, 36, 74),
+            (628, 30, 56), (790, 50, 40), (262, 24, 60), (560, 26, 104), (470, 28, 70),
         )
     )
 
     blocks = (  # (x, width, height) plain towers
-        (300, 34, 58), (334, 22, 40), (448, 20, 70), (556, 30, 64), (586, 24, 44), (612, 18, 30),
+        (236, 30, 46), (266, 24, 62), (290, 40, 36), (438, 26, 52), (606, 28, 50), (634, 18, 30),
     )
     shapes = [f'<rect x="{x}" y="{GROUND - h}" width="{w}" height="{h}"/>' for x, w, h in blocks]
     # Liberty Memorial: hill, flanking halls, tapering tower, torch.
     shapes.append(f'<path d="M0 {GROUND}V300Q60 284 112 282Q170 284 230 304V{GROUND}Z"/>')
     shapes.append('<rect x="78" y="274" width="20" height="10"/><rect x="126" y="274" width="20" height="10"/>')
-    shapes.append('<path d="M103 284L105 176H119L121 284Z"/><rect x="101" y="170" width="22" height="8"/>')
+    shapes.append('<path d="M103 284L105 182H119L121 284Z"/><rect x="101" y="176" width="22" height="8"/>')
+    # Western Auto: wedge-shaped block with a deep cornice.
+    shapes.append(f'<rect x="{WA_X}" y="{WA_TOP}" width="{WA_W}" height="{GROUND - WA_TOP}"/>')
     # City Hall: art-deco stepped tower.
-    shapes.append(f'<path d="M352 {GROUND}V236H358V214H364V196H382V214H388V236H394V{GROUND}Z"/>')
+    shapes.append(f'<path d="M464 {GROUND}V248H470V228H476V212H494V228H500V248H506V{GROUND}Z"/>')
     # Power & Light: stepped crown with a lantern.
-    shapes.append(f'<path d="M402 {GROUND}V206H406V190H410V176H414V164H434V176H438V190H442V206H446V{GROUND}Z"/>')
-    shapes.append('<rect x="419" y="146" width="10" height="18"/><path d="M419 146L424 136L429 146Z"/>')
+    shapes.append(f'<path d="M508 {GROUND}V222H512V208H516V196H520V186H540V196H544V208H548V222H552V{GROUND}Z"/>')
+    shapes.append('<rect x="525" y="172" width="10" height="14"/><path d="M525 172L530 164L535 172Z"/>')
     # One Kansas City Place: the tallest, with a stepped pyramid top.
-    shapes.append(f'<path d="M468 {GROUND}V172H472V160H478V150H498V160H504V172H508V{GROUND}Z"/>')
-    shapes.append('<path d="M482 150L488 132L494 150Z"/>')
+    shapes.append(f'<path d="M556 {GROUND}V192H560V182H566V174H586V182H592V192H596V{GROUND}Z"/>')
+    shapes.append('<path d="M570 174L576 160L582 174Z"/>')
     # Town Pavilion: angled roofline.
-    shapes.append(f'<path d="M514 {GROUND}V204L544 188V{GROUND}Z"/>')
+    shapes.append(f'<path d="M598 {GROUND}V216L626 202V{GROUND}Z"/>')
     # Bartle Hall: long low hall with four pylons carrying the Sky Stations.
-    shapes.append(f'<rect x="640" y="{GROUND - 22}" width="190" height="22"/>')
-    for px in (662, 708, 754, 800):
+    shapes.append(f'<rect x="652" y="{GROUND - 22}" width="190" height="22"/>')
+    for px in (674, 718, 762, 806):
         shapes.append(
-            f'<rect x="{px - 2}" y="196" width="4" height="{GROUND - 196}"/>'
-            f'<path d="M{px - 9} 196L{px - 3} 182L{px + 1} 188L{px + 9} 180L{px + 5} 196Z"/>'
+            f'<rect x="{px - 2}" y="200" width="4" height="{GROUND - 200}"/>'
+            f'<path d="M{px - 9} 200L{px - 3} 186L{px + 1} 192L{px + 9} 184L{px + 5} 200Z"/>'
         )
 
     windows = []
-    for x, w, h in (*blocks, (352, 42, 82), (402, 44, 112), (468, 40, 146), (514, 30, 114)):
+    for x, w, h in (*blocks, (464, 42, 70), (508, 44, 96), (556, 40, 126), (598, 28, 102)):
         for wy in range(GROUND - h + 8, GROUND - 6, 8):
             for wx in range(x + 4, x + w - 4, 6):
                 if rnd.random() < 0.18:
                     fill = PINK_SOFT if rnd.random() < 0.2 else WARM
                     windows.append(f'<rect x="{wx}" y="{wy}" width="2" height="3" fill="{fill}"/>')
-    windows.append(f'<rect class="blink" x="482" y="178" width="2" height="3" fill="{WARM}"/>')
+    # Western Auto's regular grid of tall windows, most of them lit (it's lofts now).
+    for wy in range(WA_TOP + 16, GROUND - 8, 9):
+        for wx in range(WA_X + 6, WA_X + WA_W - 6, 7):
+            if rnd.random() < 0.55:
+                windows.append(f'<rect x="{wx}" y="{wy}" width="3" height="5" fill="{WARM}"/>')
+    windows.append(f'<rect class="blink" x="570" y="196" width="2" height="3" fill="{WARM}"/>')
 
     return back, "".join(shapes), "".join(windows)
 
 
+def western_auto_sign() -> str:
+    """The 1952 Western Auto rooftop sign, reworded: red slab-serif neon inside a
+    ring of white bulbs that runs clockwise and ends in an arrowhead, all on a
+    steel lattice. The bulbs chase, as the original's once did."""
+    ultra = Script("Ultra-Regular.ttf")
+    cx, cy, r = SIGN_X, SIGN_Y, SIGN_R
+
+    def at(clock_deg: float, radius: float = r) -> tuple[float, float]:
+        a = math.radians(clock_deg)
+        return cx + radius * math.sin(a), cy - radius * math.cos(a)
+
+    # Ring: from ~8 o'clock, clockwise over the top, round to just past 6.
+    (sx, sy), (ex, ey) = at(240), at(528)
+    ring = f"M{n(sx)} {n(sy)}A{r} {r} 0 1 1 {n(ex)} {n(ey)}"
+    # Arrowhead at the end, pointing along the direction of travel.
+    tx, ty = math.cos(math.radians(528)), math.sin(math.radians(528))
+    tip = (ex + tx * 14, ey + ty * 14)
+    barbs = []
+    for turn in (145, -145):
+        a = math.atan2(ty, tx) + math.radians(turn)
+        barbs.append(f"M{n(tip[0])} {n(tip[1])}L{n(tip[0] + 17 * math.cos(a))} {n(tip[1] + 17 * math.sin(a))}")
+    head = f"M{n(ex)} {n(ey)}L{n(tip[0])} {n(tip[1])}" + "".join(barbs)
+    # Fletching at the start.
+    ux, uy = math.cos(math.radians(240)), math.sin(math.radians(240))
+    tail = "".join(
+        f"M{n(sx)} {n(sy)}L{n(sx + 10 * math.cos(math.atan2(uy, ux) + math.radians(t)))} "
+        f"{n(sy + 10 * math.sin(math.atan2(uy, ux) + math.radians(t)))}"
+        for t in (40, -40)
+    )
+    bulbs = ring + head + tail
+
+    size = 46
+    word = ultra.path("the", size, cx - ultra.width("the", size) / 2, cy + 14)
+
+    posts = "".join(f"M{x} {cy - 20}V{WA_TOP}" for x in range(cx - 40, cx + 41, 20))
+    braces = "".join(
+        f"M{x} {y}L{x + 20} {y + 20}M{x + 20} {y}L{x} {y + 20}"
+        for x in range(cx - 40, cx + 40, 20)
+        for y in range(int(cy) + 40, WA_TOP - 10, 20)
+    )
+    return f"""<g fill="none" stroke="#4b3a6e" stroke-width="1.6">
+      <path d="{posts}"/><path d="{braces}" stroke-width="1"/><path d="M{cx - 44} {WA_TOP}H{cx + 44}"/>
+    </g>
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="{bulbs}" stroke="#ffe6c7" stroke-opacity=".22" stroke-width="5"/>
+      <path d="{bulbs}" stroke="#fff4e0" stroke-width="3.2" stroke-dasharray="0 5.2" opacity=".55"/>
+      <path class="chase" d="{bulbs}" stroke="#fffaf0" stroke-width="3.6" stroke-dasharray="0 15.6" filter="url(#glowBulb)"/>
+    </g>
+    <path class="ign2" d="{word}" fill="{RED}" stroke="#ffd2c4" stroke-width="1" filter="url(#glowRed)"/>"""
+
+
 def hero() -> str:
     W, H = 840, 400
-    yellowtail = Script("Yellowtail-Regular.ttf")
     rnd = random.Random(7)
 
-    pitch, top = 11.5, 92
-    gap = 150  # room for the script "the" between THE and CHAD
+    pitch, top = 13, 72
+    gap = 2 * SIGN_R + 46  # room for the Western Auto sign between THE and CHAD
     the_w, chad_w = (3 * 6 - 1) * pitch, (4 * 6 - 1) * pitch
-    x0 = (W - (the_w + gap + chad_w)) / 2 + pitch / 2
-    lit_a, off_a = matrix("THE", x0, top, pitch)
-    lit_b, off_b = matrix("CHAD", x0 + the_w + gap, top, pitch)
-
-    script_size = 92
-    sx = x0 + the_w - pitch / 2 + (gap - yellowtail.width("the", script_size)) / 2
-    script = yellowtail.path("the", script_size, sx, top + 6 * pitch)
-    script_cx, script_cy = W / 2, top + 3 * pitch
+    x0 = SIGN_X - gap / 2 - the_w + pitch / 2
+    fleet = drones("THE", x0, top, pitch, rnd) + drones("CHAD", x0 + the_w + gap, top, pitch, rnd)
 
     TWINKLE = ' class="tw" style="animation-delay:{:.1f}s"'
     stars = "".join(
@@ -217,13 +280,16 @@ def hero() -> str:
     back, front, windows = skyline()
     frame = f"M0 18Q0 0 18 0H{W - 18}Q{W} 0 {W} 18V350Q{W / 2} 412 0 350Z"
 
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" aria-label="{escape(HANDLE)}: a Kansas City skyline at dusk under a glowing LED-matrix name">
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" aria-label="{escape(HANDLE)}: a drone light show spells THE and CHAD over the Kansas City skyline at dusk, with the Western Auto sign reading 'the' between them">
   <title>{escape(HANDLE)} :: {escape(TAGLINE.lower())}</title>
   <style>
     text {{ font-family: {MONO}; white-space: pre; }}
-    .ign {{ animation: ign 1.4s steps(1) .2s; }}
-    .ign2 {{ animation: ign 1.6s steps(1) 1.1s; }}
+    .fly {{ animation: fly 2.8s cubic-bezier(.25,.7,.25,1) backwards; }}
+    @keyframes fly {{ from {{ transform: translate(var(--dx), var(--dy)); }} }}
+    .ign2 {{ animation: ign 1.6s steps(1) 2.6s; }}
     @keyframes ign {{ 0% {{ opacity: .12; }} 10% {{ opacity: 1; }} 16% {{ opacity: .25; }} 28% {{ opacity: 1; }} 34% {{ opacity: .5; }} 42%, 100% {{ opacity: 1; }} }}
+    .chase {{ animation: chase .9s steps(3) infinite; }}
+    @keyframes chase {{ to {{ stroke-dashoffset: -15.6; }} }}
     .tw {{ animation: tw 5s ease-in-out infinite; }}
     @keyframes tw {{ 50% {{ opacity: .2; }} }}
     .blink {{ animation: blink 9s steps(1) infinite; }}
@@ -238,17 +304,20 @@ def hero() -> str:
     </linearGradient>
     <radialGradient id="haze" cx=".5" cy="1" r=".6"><stop offset="0" stop-color="{PINK}" stop-opacity=".45"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></radialGradient>
     <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#120826"/><stop offset="1" stop-color="{INK}"/></linearGradient>
-    <linearGradient id="chrome" x1="0" y1="{top - pitch}" x2="0" y2="{top + 7 * pitch}" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="{CORE}"/><stop offset=".45" stop-color="#7df9ff"/><stop offset=".55" stop-color="{CYAN}"/><stop offset="1" stop-color="{CYAN_DEEP}"/>
-    </linearGradient>
+    <radialGradient id="led"><stop offset="0" stop-color="{CORE}"/><stop offset=".25" stop-color="{CYAN}" stop-opacity=".9"/><stop offset="1" stop-color="{CYAN}" stop-opacity="0"/></radialGradient>
     <radialGradient id="vignette" cx=".5" cy=".45" r=".75"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>
     <linearGradient id="lantern" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{CYAN}"/><stop offset="1" stop-color="{PINK}"/></linearGradient>
     <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="1.5" fill="#000" opacity=".22"/></pattern>
     <filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0"/></filter>
-    {neon_filter("glowCyan", CYAN, (1.5, 5, 11))}
-    {neon_filter("glowPink", PINK, (2, 6, 12), 3)}
+    {neon_filter("glowRed", RED_GLOW, (2, 5, 10))}
+    {neon_filter("glowBulb", "#ffc890", (1.5, 4))}
     {neon_filter("glowSoft", PINK, (2, 5))}
-    <circle id="dot" r="{pitch * 0.4:.1f}"/>
+    <g id="drone">
+      <circle r="{pitch * 0.72:.1f}" fill="url(#led)"/>
+      <path d="M-4.6 -4.6L4.6 4.6M4.6 -4.6L-4.6 4.6" stroke="{DRONE}" stroke-width="1"/>
+      <g fill="none" stroke="{DRONE}" stroke-width=".8"><circle cx="-4.6" cy="-4.6" r="2.1"/><circle cx="4.6" cy="-4.6" r="2.1"/><circle cx="-4.6" cy="4.6" r="2.1"/><circle cx="4.6" cy="4.6" r="2.1"/></g>
+      <circle r="1.8" fill="{CORE}"/>
+    </g>
   </defs>
 
   <g clip-path="url(#frame)">
@@ -257,19 +326,17 @@ def hero() -> str:
     <ellipse cx="{W / 2}" cy="{GROUND}" rx="{W * 0.6}" ry="150" fill="url(#haze)"/>
     <g fill="{VIOLET}" opacity=".75">{back}</g>
 
-    <!-- LED-matrix name: unlit dots, then lit dots with chrome fill + glow -->
-    <g fill="#ffffff" opacity=".07">{"".join(off_a + off_b)}</g>
-    <g class="ign" fill="url(#chrome)" filter="url(#glowCyan)">{"".join(lit_a + lit_b)}</g>
-
     <g fill="{INK}">{front}</g>
-    <rect x="419" y="148" width="10" height="14" fill="url(#lantern)" filter="url(#glowSoft)"/>
-    <circle cx="112" cy="166" r="3.5" fill="{WARM}" filter="url(#glowSoft)"/>
+    <rect x="{WA_X - 3}" y="{WA_TOP}" width="{WA_W + 6}" height="7" fill="#5a3360"/>
+    <rect x="525" y="174" width="10" height="12" fill="url(#lantern)" filter="url(#glowSoft)"/>
+    <circle cx="112" cy="172" r="3.5" fill="{WARM}" filter="url(#glowSoft)"/>
     <g opacity=".85">{windows}</g>
-    <g class="ign2" transform="rotate(-8 {n(script_cx)} {n(script_cy)})">
-      <path d="{script}" fill="#fff0fa" stroke="#fff0fa" stroke-width=".6" filter="url(#glowPink)"/>
-    </g>
+    {western_auto_sign()}
     <rect y="{GROUND}" width="{W}" height="{H - GROUND}" fill="url(#ground)"/>
     <rect y="{GROUND}" width="{W}" height="1" fill="{PINK}" opacity=".55"/>
+
+    <!-- Drone show: drawn last among the scenery so drones climb in front of it -->
+    <g>{"".join(fleet)}</g>
 
     {label(W / 2, 352, f"{PLACE}  ·  {TAGLINE}", 12, MUTED, "middle", 2.4, ' letter-spacing="2.4"')}
 
@@ -317,12 +384,12 @@ def header(index: str, word: str, theme: str) -> str:
 
 
 def liner_notes() -> str:
-    """Album back cover: SIDE A software, SIDE B hardware, on a dark plate (theme-proof)."""
+    """Album back cover: SIDE A agentic SDLC, SIDE B software + hardware, on a dark plate (theme-proof)."""
     W, H = 840, 256
     cedarville = Script("CedarvilleCursive-Regular.ttf")
     rows = []
     for col, (side, title, tracks, start) in enumerate(
-        (("SIDE A", "SOFTWARE", SIDE_A, 1), ("SIDE B", "HARDWARE", SIDE_B, len(SIDE_A) + 1))
+        (("SIDE A", "AGENTIC SDLC", SIDE_A, 1), ("SIDE B", "SOFTWARE + HARDWARE", SIDE_B, len(SIDE_A) + 1))
     ):
         x = 48 + col * 400
         rows.append(label(x, 58, f"{side}  ·  {title}", 12, CYAN, spacing=2.4, extra=' letter-spacing="2.4"'))
@@ -340,7 +407,7 @@ def liner_notes() -> str:
         '<path d="M24 236H120L132 224H220"/><path d="M24 244H150L162 232H260"/></g>'
         f'<g fill="{NIGHT}" stroke="{RIM}" stroke-width="2"><circle cx="220" cy="224" r="4"/><circle cx="260" cy="232" r="4"/></g>'
     )
-    alt = "Side A, software: " + ", ".join(SIDE_A) + ". Side B, hardware: " + ", ".join(SIDE_B) + "."
+    alt = "Side A, agentic SDLC: " + ", ".join(SIDE_A) + ". Side B, software and hardware: " + ", ".join(SIDE_B) + "."
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" aria-label="{escape(alt)}">
   <title>{escape(alt)}</title>
   <style>text {{ font-family: {MONO}; white-space: pre; }}</style>
@@ -349,7 +416,7 @@ def liner_notes() -> str:
   <rect x="420" y="44" width="1" height="164" fill="{RIM}"/>
   {"".join(rows)}
   {trace}
-  <path d="{caption}" fill="{PINK_SOFT}" filter="url(#neon)" transform="translate({n(W - 56 - cap_w)} 200) rotate(-4)"/>
+  <path d="{caption}" fill="{PINK_SOFT}" filter="url(#neon)" transform="translate({n(W - 56 - cap_w)} 224) rotate(-4)"/>
 </svg>
 """
 
