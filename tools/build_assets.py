@@ -49,7 +49,7 @@ VIOLET, RIM = "#2a1450", "#3a1f5c"
 PINK, PINK_SOFT, MAGENTA = "#ff3ea5", "#ff65b8", "#ff10f0"
 CYAN, CYAN_DEEP, CORE = "#2de2e6", "#1b6fd6", "#e6fdff"
 WARM, TEXT, MUTED = "#ffcf7a", "#f3e9ff", "#b8a6d9"
-RED, RED_GLOW, DRONE = "#ff4433", "#ff2a1f", "#7f89bf"  # Western Auto neon; drone frames
+RED, RED_GLOW, NAV = "#ff4433", "#ff2a1f", "#ffd9a8"  # Western Auto neon; drone nav light in flight
 PINK_ON_WHITE, CYAN_ON_WHITE = "#c2186b", "#0e7490"
 
 MONO = (
@@ -116,32 +116,92 @@ def neon_filter(fid: str, color: str, blurs: tuple[float, ...], strength: int = 
     )
 
 
-# ---- Drone light show: each lit cell of a 5x7 matrix is one quadcopter ----
-MATRIX = {
-    "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
-    "H": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
-    "E": ("11111", "10000", "10000", "11110", "10000", "10000", "11111"),
-    "C": ("01110", "10001", "10000", "10000", "10000", "10001", "01110"),
-    "A": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
-    "D": ("11110", "10001", "10001", "10001", "10001", "10001", "11110"),
+# ---- Drone light show: points of light on single-stroke letter skeletons ----
+# At this scale a show drone is only its LED, so there is no airframe. Each letter
+# is a few centre-line strokes in a unit box (x across the letter's width, y down
+# its cap height): "L" polylines and "A" elliptical arcs (cx, cy, rx, ry, deg0,
+# deg1). Lights sit at equal arc length along them, like a real show's lettering.
+SKELETON = {
+    "T": (("L", ((0, 0), (1, 0))), ("L", ((0.5, 0), (0.5, 1)))),
+    "H": (("L", ((0, 0), (0, 1))), ("L", ((1, 0), (1, 1))), ("L", ((0, 0.5), (1, 0.5)))),
+    "E": (("L", ((1, 0), (0, 0), (0, 1), (1, 1))), ("L", ((0, 0.5), (0.85, 0.5)))),
+    "C": (("A", (0.52, 0.5, 0.5, 0.5, 48, 312)),),
+    "A": (("L", ((0, 1), (0.5, 0), (1, 1))), ("L", ((0.19, 0.62), (0.81, 0.62)))),
+    "D": (("L", ((0.42, 0), (0, 0), (0, 1), (0.42, 1))), ("A", (0.42, 0.5, 0.55, 0.5, 90, -90))),
 }
+LETTER_W = {"E": 0.9, "A": 1.05}  # width relative to the rest
+CAP, ASPECT, TRACK, SPACING = 78, 0.68, 22, 6  # cap height, width/cap, gap, light pitch
+SHEET_ROWS, SHEET_GAP = 4, 14  # staging grid the fleet holds in before it morphs
+
+# Show timing (s). Each drone: launch → hold in the staging sheet → morph into its
+# letter → ignite. Launches roll left to right; one shimmer follows the last landing.
+FLY, LAUNCH_WAVE, SWEEP_AT, SWEEP_WAVE = 4.2, 1.0, 5.4, 0.7
 
 
-def drones(word: str, x0: float, y0: float, pitch: float, rnd: random.Random) -> list[str]:
-    """One <use> per drone. Each flies up from the ground into formation once;
-    with animation off it simply sits in formation."""
+def resample(poly: list[tuple[float, float]], step: float) -> list[tuple[float, float]]:
+    """Points every ~step along a polyline, both ends included."""
+    seg = [math.dist(a, b) for a, b in zip(poly, poly[1:])]
+    total = sum(seg)
+    k = max(1, round(total / step))
     out = []
-    for i, ch in enumerate(word):
-        for row, bits in enumerate(MATRIX[ch]):
-            for col, bit in enumerate(bits):
-                if bit != "1":
-                    continue
-                x, y = x0 + (i * 6 + col) * pitch, y0 + row * pitch
-                dx, dy = rnd.uniform(-70, 70), GROUND - 4 - y  # lift off from the horizon
-                out.append(
-                    f'<use href="#drone" x="{n(x)}" y="{n(y)}" class="fly" '
-                    f'style="--dx:{dx:.0f}px;--dy:{dy:.0f}px;animation-delay:{rnd.uniform(0, 1.4):.2f}s"/>'
-                )
+    for j in range(k + 1):
+        d, i = total * j / k, 0
+        while i < len(seg) - 1 and d > seg[i]:
+            d -= seg[i]
+            i += 1
+        (x0, y0), (x1, y1) = poly[i], poly[i + 1]
+        t = d / seg[i] if seg[i] else 0
+        out.append((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t))
+    return out
+
+
+def word_lights(word: str, x: float, y: float) -> tuple[list[tuple[float, float]], float]:
+    """Light positions spelling `word` from (x, y) top-left, and the word's width."""
+    pts: list[tuple[float, float]] = []
+    x_start = x
+    for ch in word:
+        w = CAP * ASPECT * LETTER_W.get(ch, 1)
+        for kind, data in SKELETON[ch]:
+            if kind == "L":
+                poly = [(x + px * w, y + py * CAP) for px, py in data]
+            else:
+                cx, cy, rx, ry, a0, a1 = data
+                poly = [
+                    (x + (cx + rx * math.cos(a)) * w, y + (cy + ry * math.sin(a)) * CAP)
+                    for a in (math.radians(a0 + (a1 - a0) * i / 200) for i in range(201))
+                ]
+            for p in resample(poly, SPACING):  # merge lights where strokes meet
+                if all(math.dist(p, q) > SPACING * 0.55 for q in pts):
+                    pts.append(p)
+        x += w + TRACK
+    return pts, x - TRACK - x_start
+
+
+def drones(
+    lights: list[tuple[float, float]], width: float, top: float, span: tuple[float, float], rnd: random.Random
+) -> list[str]:
+    """One drone per light. It lifts off from behind the skyline straight up into a
+    staging sheet, then morphs into its letter. Lights and sheet slots are paired in
+    left-to-right order so no two paths cross. The markup sits at the finished
+    formation; the animation only supplies offsets, so with it off the word is there."""
+    pts = sorted(lights)
+    cols = math.ceil(len(pts) / SHEET_ROWS)
+    x0 = pts[0][0]
+    sheet = [
+        (x0 + c * width / (cols - 1), top + 18 + r * SHEET_GAP)
+        for c in range(cols)
+        for r in range(SHEET_ROWS)
+    ]
+    left, right = span  # the whole fleet's extent, so both words share one wave
+    out = []
+    for (x, y), (sx, sy) in zip(pts, sheet):
+        lx, ly = sx - x + rnd.uniform(-1.5, 1.5), GROUND - 4 - rnd.uniform(0, 10) - y
+        launch = LAUNCH_WAVE * (sx - left) / (right - left) + rnd.uniform(0, 0.12)
+        sweep = SWEEP_AT + SWEEP_WAVE * (x - left) / (right - left)
+        out.append(
+            f'<g class="d" style="--lx:{lx:.0f}px;--ly:{ly:.0f}px;--sx:{sx - x:.0f}px;--sy:{sy - y:.0f}px;'
+            f'animation-delay:{launch:.2f}s,{sweep:.2f}s"><use href="#drone" x="{n(x)}" y="{n(y)}"/></g>'
+        )
     return out
 
 
@@ -266,11 +326,14 @@ def hero() -> str:
     W, H = 840, 400
     rnd = random.Random(7)
 
-    pitch, top = 13, 72
-    gap = 2 * SIGN_R + 46  # room for the Western Auto sign between THE and CHAD
-    the_w, chad_w = (3 * 6 - 1) * pitch, (4 * 6 - 1) * pitch
-    x0 = SIGN_X - gap / 2 - the_w + pitch / 2
-    fleet = drones("THE", x0, top, pitch, rnd) + drones("CHAD", x0 + the_w + gap, top, pitch, rnd)
+    top, gap = 72, 2 * SIGN_R + 50  # room for the Western Auto sign between THE and CHAD
+    the, the_w = word_lights("THE", 0, top)
+    chad, chad_w = word_lights("CHAD", 0, top)
+    the_x, chad_x = SIGN_X - gap / 2 - the_w, SIGN_X + gap / 2
+    the = [(x + the_x, y) for x, y in the]
+    chad = [(x + chad_x, y) for x, y in chad]
+    span = (the_x, chad_x + chad_w)
+    fleet = drones(the, the_w, top, span, rnd) + drones(chad, chad_w, top, span, rnd)
 
     TWINKLE = ' class="tw" style="animation-delay:{:.1f}s"'
     stars = "".join(
@@ -285,9 +348,17 @@ def hero() -> str:
   <title>{escape(HANDLE)} :: {escape(TAGLINE.lower())}</title>
   <style>
     text {{ font-family: {MONO}; white-space: pre; }}
-    .fly {{ animation: fly 2.8s cubic-bezier(.25,.7,.25,1) backwards; }}
-    @keyframes fly {{ from {{ transform: translate(var(--dx), var(--dy)); }} }}
-    .ign2 {{ animation: ign 1.6s steps(1) 2.6s; }}
+    .d {{ color: {CORE}; fill-opacity: .8; animation: fly {FLY}s backwards, sweep 1.1s ease-out; }}
+    @keyframes fly {{
+      0% {{ transform: translate(var(--lx), var(--ly)); opacity: 0; color: {NAV}; fill-opacity: 0; animation-timing-function: cubic-bezier(.4,0,.2,1); }}
+      38% {{ transform: translate(var(--sx), var(--sy)); opacity: 1; color: {NAV}; fill-opacity: 0; animation-timing-function: linear; }}
+      50% {{ transform: translate(var(--sx), var(--sy)); opacity: 1; color: {NAV}; fill-opacity: 0; animation-timing-function: cubic-bezier(.6,0,.25,1); }}
+      88% {{ transform: translate(0, 0); opacity: 1; color: {NAV}; fill-opacity: 0; animation-timing-function: ease-out; }}
+      93% {{ transform: translate(0, 0); opacity: 1; color: #fff; fill-opacity: 1; }}
+      100% {{ transform: translate(0, 0); opacity: 1; color: {CORE}; fill-opacity: .8; }}
+    }}
+    @keyframes sweep {{ 30% {{ fill-opacity: 1; color: #fff; }} }}
+    .ign2 {{ animation: ign 1.6s steps(1) {SWEEP_AT - 0.4:.1f}s; }}
     @keyframes ign {{ 0% {{ opacity: .12; }} 10% {{ opacity: 1; }} 16% {{ opacity: .25; }} 28% {{ opacity: 1; }} 34% {{ opacity: .5; }} 42%, 100% {{ opacity: 1; }} }}
     .chase {{ animation: chase .9s steps(3) infinite; }}
     @keyframes chase {{ to {{ stroke-dashoffset: -15.6; }} }}
@@ -305,7 +376,7 @@ def hero() -> str:
     </linearGradient>
     <radialGradient id="haze" cx=".5" cy="1" r=".6"><stop offset="0" stop-color="{PINK}" stop-opacity=".45"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></radialGradient>
     <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#120826"/><stop offset="1" stop-color="{INK}"/></linearGradient>
-    <radialGradient id="led"><stop offset="0" stop-color="{CORE}"/><stop offset=".25" stop-color="{CYAN}" stop-opacity=".9"/><stop offset="1" stop-color="{CYAN}" stop-opacity="0"/></radialGradient>
+    <radialGradient id="led"><stop offset="0" stop-color="{CORE}"/><stop offset=".22" stop-color="{CYAN}" stop-opacity=".85"/><stop offset="1" stop-color="{CYAN}" stop-opacity="0"/></radialGradient>
     <radialGradient id="vignette" cx=".5" cy=".45" r=".75"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>
     <linearGradient id="lantern" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{CYAN}"/><stop offset="1" stop-color="{PINK}"/></linearGradient>
     <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="1.5" fill="#000" opacity=".22"/></pattern>
@@ -313,12 +384,10 @@ def hero() -> str:
     {neon_filter("glowRed", RED_GLOW, (2, 5, 10))}
     {neon_filter("glowBulb", "#ffc890", (1.5, 4))}
     {neon_filter("glowSoft", PINK, (2, 5))}
-    <g id="drone">
-      <circle r="{pitch * 0.72:.1f}" fill="url(#led)"/>
-      <path d="M-4.6 -4.6L4.6 4.6M4.6 -4.6L-4.6 4.6" stroke="{DRONE}" stroke-width="1"/>
-      <g fill="none" stroke="{DRONE}" stroke-width=".8"><circle cx="-4.6" cy="-4.6" r="2.1"/><circle cx="4.6" cy="-4.6" r="2.1"/><circle cx="-4.6" cy="4.6" r="2.1"/><circle cx="4.6" cy="4.6" r="2.1"/></g>
-      <circle r="1.8" fill="{CORE}"/>
-    </g>
+    <!-- One show drone = its LED. The halo inherits fill-opacity and the core takes
+         currentColor, so each .d wrapper animates its own light: a dim warm nav
+         point in flight, a cyan glow once it lands. -->
+    <g id="drone"><circle r="6.5" fill="url(#led)"/><circle r="1.4" fill="currentColor" fill-opacity="1"/></g>
   </defs>
 
   <g clip-path="url(#frame)">
@@ -326,6 +395,9 @@ def hero() -> str:
     <g fill="#fff" opacity=".8">{stars}</g>
     <ellipse cx="{W / 2}" cy="{GROUND}" rx="{W * 0.6}" ry="150" fill="url(#haze)"/>
     <g fill="{VIOLET}" opacity=".75">{back}</g>
+
+    <!-- Drone show: drawn behind the front skyline so the fleet lifts off from behind the buildings -->
+    <g>{"".join(fleet)}</g>
 
     <g fill="{INK}">{front}</g>
     <rect x="{WA_X - 3}" y="{WA_TOP}" width="{WA_W + 6}" height="7" fill="#5a3360"/>
@@ -335,9 +407,6 @@ def hero() -> str:
     {western_auto_sign()}
     <rect y="{GROUND}" width="{W}" height="{H - GROUND}" fill="url(#ground)"/>
     <rect y="{GROUND}" width="{W}" height="1" fill="{PINK}" opacity=".55"/>
-
-    <!-- Drone show: drawn last among the scenery so drones climb in front of it -->
-    <g>{"".join(fleet)}</g>
 
     {label(W / 2, 352, f"{PLACE}  ·  {TAGLINE}", 12, MUTED, "middle", 2.4, ' letter-spacing="2.4"')}
 
