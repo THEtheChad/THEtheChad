@@ -26,7 +26,7 @@ Underneath that it's still **TypeScript, React, and Next.js**, and away from the
   <img src="assets/h-playing.svg" width="100%" alt="Now playing" />
 </picture>
 
-https://github.com/user-attachments/assets/01024920-9cb2-44c6-b833-9130d0e9154f
+https://github.com/user-attachments/assets/a08b96a2-e3c7-4b3a-b443-5dc05d26e1eb
 
 <p align="center"><sub><code>SIDE C · "COASTAL CHIMES" · SOUND ON ♪</code></sub></p>
 
