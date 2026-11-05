@@ -34,7 +34,8 @@ TAGLINE = "AGENTIC SDLC / AI / HARDWARE"
 HEADERS = (  # (file stem, index, script word, alt text)
     ("h-about", "01", "about", "About"),
     ("h-stack", "02", "the stack", "The stack"),
-    ("h-lately", "03", "lately", "Lately"),
+    ("h-playing", "03", "now playing", "Now playing"),
+    ("h-lately", "04", "lately", "Lately"),
 )
 SIDE_A = ("Claude Code · Codex", "Multi-agent orchestration", "Plan → build → review loops", "MCP servers · hooks", "Worktrees & guardrails")
 SIDE_B = ("TypeScript · React · Next.js", "Node.js · Python · Bash", "Arduino · ESP · STM32", "Anything with a serial port")

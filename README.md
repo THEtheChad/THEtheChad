@@ -22,6 +22,15 @@ Underneath that it's still **TypeScript, React, and Next.js**, and away from the
 <img src="assets/liner-notes.svg" width="100%" alt="Side A, agentic SDLC: Claude Code and Codex, multi-agent orchestration, plan-build-review loops, MCP servers and hooks, worktrees and guardrails. Side B, software and hardware: TypeScript, React, Next.js, Node.js, Python, Bash, Arduino, ESP, STM32, and anything with a serial port." />
 
 <picture>
+  <source media="(prefers-color-scheme: light)" srcset="assets/h-playing-light.svg" />
+  <img src="assets/h-playing.svg" width="100%" alt="Now playing" />
+</picture>
+
+https://github.com/user-attachments/assets/01024920-9cb2-44c6-b833-9130d0e9154f
+
+<p align="center"><sub><code>SIDE C · "COASTAL CHIMES" · SOUND ON ♪</code></sub></p>
+
+<picture>
   <source media="(prefers-color-scheme: light)" srcset="assets/h-lately-light.svg" />
   <img src="assets/h-lately.svg" width="100%" alt="Lately" />
 </picture>
