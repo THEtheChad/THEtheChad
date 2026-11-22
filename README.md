@@ -28,7 +28,7 @@ Underneath that it's still **TypeScript, React, and Next.js**, and away from the
 
 https://github.com/user-attachments/assets/a08b96a2-e3c7-4b3a-b443-5dc05d26e1eb
 
-<p align="center"><sub><code>SIDE C · "COASTAL CHIMES" · SOUND ON ♪</code></sub></p>
+<p align="center"><sub><a href="https://thethechad.github.io/THEtheChad/coastal-chimes.mp4"><code>SIDE C · "COASTAL CHIMES" · SOUND ON ♪ · ▶ PLAY</code></a></sub></p>
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="assets/h-lately-light.svg" />
